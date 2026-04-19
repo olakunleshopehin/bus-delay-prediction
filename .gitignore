@@ -1,0 +1,20 @@
+# Data files - too large for GitHub
+timetables/
+weather/
+temp_day_*.parquet
+scotland_bus_delays_synthetic.parquet
+gtfs_rt_all_tags_02.parquet
+
+# Large model file
+random_forest_model.pkl
+
+# Secrets
+.streamlit/secrets.toml
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Python cache
+__pycache__/
+*.pyc
+Scotland_Bus_Delay_E2E_Pipeline.ipynb
