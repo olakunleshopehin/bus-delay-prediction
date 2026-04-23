@@ -157,49 +157,125 @@ def map_conditions(weather_main, weather_desc, precip, preciptype):
         return "Partly cloudy"
 
 
+# # Overpass API - fetch nearby cafes, restaurants, shops
+# def fetch_nearby_places(lat, lon, radius=500):
+#     query = f"""
+#     [out:json][timeout:10];
+#     (
+#       node["amenity"="cafe"](around:{radius},{lat},{lon});
+#       node["amenity"="restaurant"](around:{radius},{lat},{lon});
+#       node["shop"](around:{radius},{lat},{lon});
+#     );
+#     out body 10;
+#     """
+#     url = "https://overpass-api.de/api/interpreter"
+
+#     try:
+#         response = requests.post(url, data={"data": query}, timeout=15)
+#         if response.status_code != 200:
+#             return []
+
+#         data = response.json()
+#         places = []
+#         for element in data.get("elements", []):
+#             tags = element.get("tags", {})
+#             name = tags.get("name")
+#             if not name:
+#                 continue
+
+#             place_lat = element.get("lat", lat)
+#             place_lon = element.get("lon", lon)
+
+#             dist = haversine(lat, lon, place_lat, place_lon)
+#             place_type = tags.get("amenity", tags.get("shop", "shop"))
+
+#             places.append({
+#                 "name": name,
+#                 "type": place_type.title(),
+#                 "distance_m": round(dist),
+#             })
+
+#         places.sort(key=lambda x: x["distance_m"])
+#         return places[:5]
+
+#     except Exception:
+#         return []
+
+
+# def haversine(lat1, lon1, lat2, lon2):
+#     R = 6371000
+#     phi1 = np.radians(lat1)
+#     phi2 = np.radians(lat2)
+#     dphi = np.radians(lat2 - lat1)
+#     dlam = np.radians(lon2 - lon1)
+#     a = np.sin(dphi / 2) ** 2 + np.cos(phi1) * np.cos(phi2) * np.sin(dlam / 2) ** 2
+#     return R * 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+
 # Overpass API - fetch nearby cafes, restaurants, shops
-def fetch_nearby_places(lat, lon, radius=500):
+def fetch_nearby_places(lat, lon, radius=1000):
     query = f"""
-    [out:json][timeout:10];
+    [out:json][timeout:30];
     (
       node["amenity"="cafe"](around:{radius},{lat},{lon});
+      way["amenity"="cafe"](around:{radius},{lat},{lon});
       node["amenity"="restaurant"](around:{radius},{lat},{lon});
+      way["amenity"="restaurant"](around:{radius},{lat},{lon});
+      node["amenity"="fast_food"](around:{radius},{lat},{lon});
+      way["amenity"="fast_food"](around:{radius},{lat},{lon});
+      node["amenity"="bar"](around:{radius},{lat},{lon});
+      node["amenity"="pub"](around:{radius},{lat},{lon});
       node["shop"](around:{radius},{lat},{lon});
+      way["shop"](around:{radius},{lat},{lon});
     );
-    out body 10;
+    out center 20;
     """
-    url = "https://overpass-api.de/api/interpreter"
 
-    try:
-        response = requests.post(url, data={"data": query}, timeout=15)
-        if response.status_code != 200:
-            return []
+    servers = [
+        "https://overpass-api.de/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter"
+    ]
 
-        data = response.json()
-        places = []
-        for element in data.get("elements", []):
-            tags = element.get("tags", {})
-            name = tags.get("name")
-            if not name:
-                continue
+    data = None
+    for url in servers:
+        try:
+            response = requests.post(url, data={"data": query}, timeout=35)
+            if response.status_code == 200:
+                data = response.json()
+                break
+        except Exception:
+            continue
 
+    if not data:
+        return []
+
+    places = []
+    for element in data.get("elements", []):
+        tags = element.get("tags", {})
+        name = tags.get("name")
+        if not name:
+            continue
+
+        # Handle both node and way coordinates
+        if element.get("type") == "node":
             place_lat = element.get("lat", lat)
             place_lon = element.get("lon", lon)
+        else:
+            center = element.get("center", {})
+            place_lat = center.get("lat", lat)
+            place_lon = center.get("lon", lon)
 
-            dist = haversine(lat, lon, place_lat, place_lon)
-            place_type = tags.get("amenity", tags.get("shop", "shop"))
+        dist = haversine(lat, lon, place_lat, place_lon)
+        place_type = tags.get("amenity", tags.get("shop", "shop"))
 
-            places.append({
-                "name": name,
-                "type": place_type.title(),
-                "distance_m": round(dist),
-            })
+        places.append({
+            "name": name,
+            "type": place_type.title(),
+            "distance_m": round(dist),
+        })
 
-        places.sort(key=lambda x: x["distance_m"])
-        return places[:5]
-
-    except Exception:
-        return []
+    places.sort(key=lambda x: x["distance_m"])
+    return places[:5]
 
 
 def haversine(lat1, lon1, lat2, lon2):
@@ -208,7 +284,7 @@ def haversine(lat1, lon1, lat2, lon2):
     phi2 = np.radians(lat2)
     dphi = np.radians(lat2 - lat1)
     dlam = np.radians(lon2 - lon1)
-    a = np.sin(dphi / 2) ** 2 + np.cos(phi1) * np.cos(phi2) * np.sin(dlam / 2) ** 2
+    a = np.sin(dphi / 2) * 2 + np.cos(phi1) * np.cos(phi2) * np.sin(dlam / 2) * 2
     return R * 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
 
 
