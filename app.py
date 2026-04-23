@@ -211,7 +211,6 @@ def map_conditions(weather_main, weather_desc, precip, preciptype):
 #     a = np.sin(dphi / 2) ** 2 + np.cos(phi1) * np.cos(phi2) * np.sin(dlam / 2) ** 2
 #     return R * 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
 
-# Overpass API - fetch nearby cafes, restaurants, shops
 def fetch_nearby_places(lat, lon, radius=1000):
     query = f"""
     [out:json][timeout:30];
@@ -242,37 +241,48 @@ def fetch_nearby_places(lat, lon, radius=1000):
             response = requests.post(url, data={"data": query}, timeout=35)
             if response.status_code == 200:
                 data = response.json()
-                break
+                if data.get("elements"):
+                    break
         except Exception:
             continue
 
-    if not data:
+    if not data or not data.get("elements"):
         return []
 
     places = []
     for element in data.get("elements", []):
-        tags = element.get("tags", {})
-        name = tags.get("name")
-        if not name:
+        try:
+            tags = element.get("tags", {})
+            name = tags.get("name")
+            if not name:
+                continue
+
+            if element.get("type") == "node":
+                place_lat = element.get("lat")
+                place_lon = element.get("lon")
+            else:
+                center = element.get("center", {})
+                place_lat = center.get("lat")
+                place_lon = center.get("lon")
+
+            if place_lat is None or place_lon is None:
+                continue
+
+            dist = haversine(lat, lon, place_lat, place_lon)
+
+            if dist is None or np.isnan(dist):
+                continue
+
+            place_type = tags.get("amenity", tags.get("shop", "place"))
+
+            places.append({
+                "name": name,
+                "type": place_type.title(),
+                "distance_m": round(dist),
+            })
+
+        except Exception:
             continue
-
-        # Handle both node and way coordinates
-        if element.get("type") == "node":
-            place_lat = element.get("lat", lat)
-            place_lon = element.get("lon", lon)
-        else:
-            center = element.get("center", {})
-            place_lat = center.get("lat", lat)
-            place_lon = center.get("lon", lon)
-
-        dist = haversine(lat, lon, place_lat, place_lon)
-        place_type = tags.get("amenity", tags.get("shop", "shop"))
-
-        places.append({
-            "name": name,
-            "type": place_type.title(),
-            "distance_m": round(dist),
-        })
 
     places.sort(key=lambda x: x["distance_m"])
     return places[:5]
@@ -286,7 +296,6 @@ def haversine(lat1, lon1, lat2, lon2):
     dlam = np.radians(lon2 - lon1)
     a = np.sin(dphi / 2) * 2 + np.cos(phi1) * np.cos(phi2) * np.sin(dlam / 2) * 2
     return R * 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
-
 
 # OpenRouteService API - fetch alternative routes
 def fetch_alternative_routes(start_lat, start_lon, end_lat, end_lon):
