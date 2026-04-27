@@ -188,128 +188,168 @@ def map_conditions(weather_main, weather_desc, precip, preciptype):
 #             response = requests.post(url, data={"data": query}, timeout=35)
 #             if response.status_code == 200:
 #                 data = response.json()
-#                 break
+#                 if data.get("elements"):
+#                     break
 #         except Exception:
 #             continue
 
-#     if not data:
+#     if not data or not data.get("elements"):
 #         return []
 
 #     places = []
 #     for element in data.get("elements", []):
-#         tags = element.get("tags", {})
-#         name = tags.get("name")
-#         if not name:
+#         try:
+#             tags = element.get("tags", {})
+#             name = tags.get("name")
+#             if not name:
+#                 continue
+
+#             if element.get("type") == "node":
+#                 place_lat = element.get("lat")
+#                 place_lon = element.get("lon")
+#             else:
+#                 center = element.get("center", {})
+#                 place_lat = center.get("lat")
+#                 place_lon = center.get("lon")
+
+#             if place_lat is None or place_lon is None:
+#                 continue
+
+#             dist = haversine(lat, lon, place_lat, place_lon)
+
+#             if dist is None or np.isnan(dist):
+#                 continue
+
+#             place_type = tags.get("amenity", tags.get("shop", "place"))
+
+#             places.append({
+#                 "name": name,
+#                 "type": place_type.title(),
+#                 "distance_m": round(dist),
+#             })
+
+#         except Exception:
 #             continue
-
-#         # Handle both node and way coordinates
-#         if element.get("type") == "node":
-#             place_lat = element.get("lat", lat)
-#             place_lon = element.get("lon", lon)
-#         else:
-#             center = element.get("center", {})
-#             place_lat = center.get("lat", lat)
-#             place_lon = center.get("lon", lon)
-
-#         dist = haversine(lat, lon, place_lat, place_lon)
-#         place_type = tags.get("amenity", tags.get("shop", "shop"))
-
-#         places.append({
-#             "name": name,
-#             "type": place_type.title(),
-#             "distance_m": round(dist),
-#         })
 
 #     places.sort(key=lambda x: x["distance_m"])
 #     return places[:5]
 
 
-# def haversine(lat1, lon1, lat2, lon2):
-#     R = 6371000
-#     phi1 = np.radians(lat1)
-#     phi2 = np.radians(lat2)
-#     dphi = np.radians(lat2 - lat1)
-#     dlam = np.radians(lon2 - lon1)
-#     a = np.sin(dphi / 2) ** 2 + np.cos(phi1) * np.cos(phi2) * np.sin(dlam / 2) ** 2
-#     return R * 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+# Geoapity API - fetch nearby cafes, restaurants, shopsdef fetch_nearby_places(lat, lon, radius=1000):
+    # try:
+    #     api_key = st.secrets["GEOAPIFY_API_KEY"]
+    #     url = "https://api.geoapify.com/v2/places"
+    #     params = {
+    #         "categories": "catering.restaurant,catering.cafe,catering.fast_food,catering.bar,catering.pub,commercial.supermarket,commercial.shopping_mall",
+    #         "filter": f"circle:{lon},{lat},{radius}",
+    #         "bias": f"proximity:{lon},{lat}",
+    #         "limit": 10,
+    #         "apiKey": api_key
+    #     }
 
-# Overpass API - fetch nearby cafes, restaurants, shops
+    #     response = requests.get(url, params=params, timeout=15)
+
+    #     if response.status_code != 200:
+    #         return []
+
+    #     data = response.json()
+    #     places = []
+
+    #     for feature in data.get("features", []):
+    #         try:
+    #             props = feature.get("properties", {})
+    #             name = props.get("name")
+    #             if not name:
+    #                 continue
+
+    #             place_lat = feature["geometry"]["coordinates"][1]
+    #             place_lon = feature["geometry"]["coordinates"][0]
+
+    #             dist = haversine(lat, lon, place_lat, place_lon)
+
+    #             if dist is None or np.isnan(dist):
+    #                 continue
+
+    #             categories = props.get("categories", [])
+    #             if categories:
+    #                 category = categories[0].split(".")[-1].replace("_", " ").title()
+    #             else:
+    #                 category = "Place"
+
+    #             places.append({
+    #                 "name": name,
+    #                 "type": category,
+    #                 "distance_m": round(dist)
+    #             })
+
+    #         except Exception:
+    #             continue
+
+    #     places.sort(key=lambda x: x["distance_m"])
+    #     return places[:5]
+
+    # except Exception:
+    #     return []
+    
+# Geoapify API - fetch nearby cafes, restaurants, shops
 def fetch_nearby_places(lat, lon, radius=1000):
-    query = f"""
-    [out:json][timeout:30];
-    (
-      node["amenity"="cafe"](around:{radius},{lat},{lon});
-      way["amenity"="cafe"](around:{radius},{lat},{lon});
-      node["amenity"="restaurant"](around:{radius},{lat},{lon});
-      way["amenity"="restaurant"](around:{radius},{lat},{lon});
-      node["amenity"="fast_food"](around:{radius},{lat},{lon});
-      way["amenity"="fast_food"](around:{radius},{lat},{lon});
-      node["amenity"="bar"](around:{radius},{lat},{lon});
-      node["amenity"="pub"](around:{radius},{lat},{lon});
-      node["shop"](around:{radius},{lat},{lon});
-      way["shop"](around:{radius},{lat},{lon});
-    );
-    out center 20;
-    """
+    try:
+        api_key = st.secrets["GEOAPIFY_API_KEY"]
+        url = "https://api.geoapify.com/v2/places"
 
-    servers = [
-        "https://overpass-api.de/api/interpreter",
-        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
-        "https://overpass.kumi.systems/api/interpreter"
-    ]
+        params = {
+            "categories": "catering.restaurant,catering.cafe,catering.fast_food,catering.bar,catering.pub,commercial.supermarket",
+            "filter": f"circle:{float(lon)},{float(lat)},{radius}",
+            "bias": f"proximity:{float(lon)},{float(lat)}",
+            "limit": 10,
+            "lang": "en",
+            "apiKey": api_key
+        }
 
-    data = None
-    for url in servers:
-        try:
-            response = requests.post(url, data={"data": query}, timeout=35)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("elements"):
-                    break
-        except Exception:
-            continue
+        response = requests.get(url, params=params, timeout=15)
 
-    if not data or not data.get("elements"):
+        if response.status_code != 200:
+            return []
+
+        data = response.json()
+        places = []
+
+        for feature in data.get("features", []):
+            try:
+                props = feature.get("properties", {})
+                name = props.get("name")
+                if not name:
+                    continue
+
+                coords = feature["geometry"]["coordinates"]
+                place_lon = float(coords[0])
+                place_lat = float(coords[1])
+
+                dist = haversine(lat, lon, place_lat, place_lon)
+
+                if dist is None or np.isnan(dist):
+                    continue
+
+                categories = props.get("categories", [])
+                if categories:
+                    category = categories[0].split(".")[-1].replace("_", " ").title()
+                else:
+                    category = "Place"
+
+                places.append({
+                    "name": name,
+                    "type": category,
+                    "distance_m": round(dist)
+                })
+
+            except Exception:
+                continue
+
+        places.sort(key=lambda x: x["distance_m"])
+        return places[:5]
+
+    except Exception:
         return []
-
-    places = []
-    for element in data.get("elements", []):
-        try:
-            tags = element.get("tags", {})
-            name = tags.get("name")
-            if not name:
-                continue
-
-            if element.get("type") == "node":
-                place_lat = element.get("lat")
-                place_lon = element.get("lon")
-            else:
-                center = element.get("center", {})
-                place_lat = center.get("lat")
-                place_lon = center.get("lon")
-
-            if place_lat is None or place_lon is None:
-                continue
-
-            dist = haversine(lat, lon, place_lat, place_lon)
-
-            if dist is None or np.isnan(dist):
-                continue
-
-            place_type = tags.get("amenity", tags.get("shop", "place"))
-
-            places.append({
-                "name": name,
-                "type": place_type.title(),
-                "distance_m": round(dist),
-            })
-
-        except Exception:
-            continue
-
-    places.sort(key=lambda x: x["distance_m"])
-    return places[:5]
-
 
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371000
@@ -537,7 +577,7 @@ if st.button("Predict Delay", type="primary"):
                 places = fetch_nearby_places(coords["lat"], coords["lon"])
             if places:
                 for place in places:
-                    st.markdown(f"**{place['name']}** — {place['type']} · {place['distance_m']}m away")
+                    st.markdown(f"**{place['name']}** ({place['type']}) {place['distance_m']}m away")
             else:
                 st.caption("No nearby places found within 500m.")
 
